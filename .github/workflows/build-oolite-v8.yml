@@ -20,6 +20,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          path: uboot-mt7621
 
       - name: Install dependencies and Python 2
         run: |
@@ -40,6 +42,7 @@ jobs:
           ls openwrt-toolchain-ramips-mt7621_gcc-12.3.0_musl.Linux-x86_64/bin/ | grep 'gcc$' | head -3
 
       - name: Build U-Boot for Oolite V8
+        working-directory: uboot-mt7621
         run: |
           ./customize.sh NOR \
             '192k(u-boot),64k(u-boot-env),64k(factory),-(firmware)' \
@@ -55,7 +58,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: u-boot-mt7621-oolite-v8
-          path: archive/
+          path: uboot-mt7621/archive/
           retention-days: 90
 
       - name: Publish GitHub Release
@@ -85,6 +88,6 @@ jobs:
             mtd write 0x80010000 u-boot
             ```
           files: |
-            archive/u-boot-mt7621.bin
-            archive/mt7621_defconfig
+            uboot-mt7621/archive/u-boot-mt7621.bin
+            uboot-mt7621/archive/mt7621_defconfig
           fail_on_unmatched_files: true
