@@ -7,6 +7,8 @@ on:
       - 'configs/**'
       - 'include/configs/**'
       - '.github/workflows/build-oolite-v8.yml'
+    tags:
+      - 'v*'
   workflow_dispatch:
 
 jobs:
@@ -18,12 +20,34 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y gcc-mipsel-linux-gnu bison flex libssl-dev
+          sudo apt-get install -y bison flex libssl-dev xz-utils
+
+      - name: Cache ImmortalWrt SDK toolchain
+        id: cache-sdk
+        uses: actions/cache@v4
+        with:
+          path: /opt/immortalwrt-sdk
+          key: immortalwrt-sdk-23.05-ramips-mt7621-toolchain
+
+      - name: Download ImmortalWrt SDK toolchain
+        if: steps.cache-sdk.outputs.cache-hit != 'true'
+        run: |
+          SDK_URL="https://downloads.immortalwrt.org/releases/23.05-SNAPSHOT/targets/ramips/mt7621/immortalwrt-sdk-23.05-SNAPSHOT-ramips-mt7621_gcc-12.3.0_musl.Linux-x86_64.tar.xz"
+          mkdir -p /opt/immortalwrt-sdk
+          wget -q "$SDK_URL" -O /tmp/sdk.tar.xz
+          tar xf /tmp/sdk.tar.xz --strip-components=1 \
+            --wildcards '*/staging_dir/toolchain-mipsel_24kc_gcc-12.3.0_musl' \
+            -C /opt/immortalwrt-sdk
+          rm /tmp/sdk.tar.xz
 
       - name: Build U-Boot for Oolite V8
         run: |
-          make mt7621_build_defconfig CROSS_COMPILE=mipsel-linux-gnu-
-          make -j$(nproc) CROSS_COMPILE=mipsel-linux-gnu- STAGING_DIR=/tmp
+          TOOLCHAIN=/opt/immortalwrt-sdk/staging_dir/toolchain-mipsel_24kc_gcc-12.3.0_musl
+          export CROSS_COMPILE=${TOOLCHAIN}/bin/mipsel-openwrt-linux-musl-
+          export STAGING_DIR=${TOOLCHAIN}
+          export PATH="${TOOLCHAIN}/bin:$PATH"
+          make mt7621_build_defconfig
+          make -j$(nproc) CROSS_COMPILE=${CROSS_COMPILE} STAGING_DIR=${STAGING_DIR}
           mkdir -p archive
           cp u-boot-mt7621.bin archive/
           cp defconfig archive/mt7621_defconfig
@@ -34,3 +58,34 @@ jobs:
           name: u-boot-mt7621-oolite-v8
           path: archive/
           retention-days: 90
+
+      - name: Publish GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "U-Boot ${{ github.ref_name }} for Oolite V8"
+          body: |
+            ## MT7621 U-Boot for GainStrong Oolite V8.0.2
+
+            ### Board Configuration
+            - SoC: MT7621A @ 880MHz
+            - RAM: 512MB DDR3 @ 1066 MT/s
+            - Flash: 32MB NOR SPI
+            - Partition: `192k(u-boot),64k(u-boot-env),64k(factory),-(firmware)`
+            - Kernel offset: `0x50000`
+            - Reset button: GPIO 18 | Status LED: GPIO 0
+            - Baud rate: 115200
+
+            ### Files
+            - `u-boot-mt7621.bin` — Flash this via TFTP or web recovery UI
+            - `mt7621_defconfig` — Build configuration reference
+
+            ### Flashing
+            ```
+            tftpboot 0x80010000 u-boot-mt7621.bin
+            mtd write 0x80010000 u-boot
+            ```
+          files: |
+            archive/u-boot-mt7621.bin
+            archive/mt7621_defconfig
+          fail_on_unmatched_files: true
