@@ -1,0 +1,36 @@
+name: Build MT7621 U-Boot (Oolite V8)
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'configs/**'
+      - 'include/configs/**'
+      - '.github/workflows/build-oolite-v8.yml'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y gcc-mipsel-linux-gnu bison flex libssl-dev
+
+      - name: Build U-Boot for Oolite V8
+        run: |
+          make mt7621_build_defconfig CROSS_COMPILE=mipsel-linux-gnu-
+          make -j$(nproc) CROSS_COMPILE=mipsel-linux-gnu- STAGING_DIR=/tmp
+          mkdir -p archive
+          cp u-boot-mt7621.bin archive/
+          cp defconfig archive/mt7621_defconfig
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: u-boot-mt7621-oolite-v8
+          path: archive/
+          retention-days: 90

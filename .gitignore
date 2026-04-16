@@ -46,6 +46,7 @@ fit-dtb.blob
 #
 !.gitignore
 !.mailmap
+!.github
 
 #
 # Generated files
@@ -88,3 +89,7 @@ GTAGS
 *.orig
 *~
 \#*#
+
+# Local toolchain and build output
+toolchain/
+archive/
