@@ -23,7 +23,9 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y bison flex libssl-dev xz-utils
+          sudo apt-get install -y bison flex libssl-dev xz-utils python3
+          # U-Boot binman requires 'python2'; create symlink to python3 (compatible)
+          sudo ln -sf /usr/bin/python3 /usr/bin/python2
 
       - name: Cache ImmortalWrt SDK toolchain
         id: cache-sdk
