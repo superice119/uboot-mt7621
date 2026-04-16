@@ -14,6 +14,9 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
     steps:
       - uses: actions/checkout@v4
 
@@ -27,22 +30,32 @@ jobs:
         uses: actions/cache@v4
         with:
           path: /opt/immortalwrt-sdk
-          key: immortalwrt-sdk-23.05-ramips-mt7621-toolchain
+          key: immortalwrt-sdk-23.05-ramips-mt7621-toolchain-v3
 
-      - name: Download ImmortalWrt SDK toolchain
+      - name: Download and extract ImmortalWrt SDK toolchain
         if: steps.cache-sdk.outputs.cache-hit != 'true'
         run: |
           SDK_URL="https://downloads.immortalwrt.org/releases/23.05-SNAPSHOT/targets/ramips/mt7621/immortalwrt-sdk-23.05-SNAPSHOT-ramips-mt7621_gcc-12.3.0_musl.Linux-x86_64.tar.xz"
+          SDK_DIRNAME="immortalwrt-sdk-23.05-SNAPSHOT-ramips-mt7621_gcc-12.3.0_musl.Linux-x86_64"
+          echo "Downloading ImmortalWrt SDK..."
+          wget --progress=dot:giga "$SDK_URL" -O /tmp/sdk.tar.xz
+          echo "Extracting toolchain only (strip 2 components: sdk-dir + staging_dir)..."
+          # Extract staging_dir/toolchain-* by specifying exact path
+          # --strip-components=2 removes "sdk-dirname/staging_dir/" prefix
+          # Result: /opt/immortalwrt-sdk/toolchain-mipsel_24kc_gcc-12.3.0_musl/
           mkdir -p /opt/immortalwrt-sdk
-          wget -q "$SDK_URL" -O /tmp/sdk.tar.xz
-          tar xf /tmp/sdk.tar.xz --strip-components=1 \
-            --wildcards '*/staging_dir/toolchain-mipsel_24kc_gcc-12.3.0_musl' \
+          tar xf /tmp/sdk.tar.xz \
+            --strip-components=2 \
+            "${SDK_DIRNAME}/staging_dir/toolchain-mipsel_24kc_gcc-12.3.0_musl" \
             -C /opt/immortalwrt-sdk
           rm /tmp/sdk.tar.xz
+          echo "Verifying toolchain:"
+          ls /opt/immortalwrt-sdk/toolchain-mipsel_24kc_gcc-12.3.0_musl/bin/ | head -5
+          /opt/immortalwrt-sdk/toolchain-mipsel_24kc_gcc-12.3.0_musl/bin/mipsel-openwrt-linux-musl-gcc --version
 
       - name: Build U-Boot for Oolite V8
         run: |
-          TOOLCHAIN=/opt/immortalwrt-sdk/staging_dir/toolchain-mipsel_24kc_gcc-12.3.0_musl
+          TOOLCHAIN=/opt/immortalwrt-sdk/toolchain-mipsel_24kc_gcc-12.3.0_musl
           export CROSS_COMPILE=${TOOLCHAIN}/bin/mipsel-openwrt-linux-musl-
           export STAGING_DIR=${TOOLCHAIN}
           export PATH="${TOOLCHAIN}/bin:$PATH"
