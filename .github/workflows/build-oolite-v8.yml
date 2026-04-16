@@ -30,7 +30,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: /opt/immortalwrt-sdk
-          key: immortalwrt-sdk-23.05-ramips-mt7621-toolchain-v4
+          key: immortalwrt-sdk-23.05-ramips-mt7621-toolchain-v5
 
       - name: Download and extract ImmortalWrt SDK toolchain
         if: steps.cache-sdk.outputs.cache-hit != 'true'
@@ -39,16 +39,18 @@ jobs:
           SDK_DIRNAME="immortalwrt-sdk-23.05-SNAPSHOT-ramips-mt7621_gcc-12.3.0_musl.Linux-x86_64"
           echo "Downloading ImmortalWrt SDK..."
           wget --progress=dot:giga "$SDK_URL" -O /tmp/sdk.tar.xz
-          echo "Extracting toolchain only..."
-          # --wildcards with trailing * matches both the dir entry AND all contents
-          # --strip-components=2 removes "sdk-dirname/staging_dir/" prefix
-          # Result: /opt/immortalwrt-sdk/toolchain-mipsel_24kc_gcc-12.3.0_musl/
+          echo "Extracting toolchain..."
+          # Use tar tf | grep | tar -T - pipeline to avoid path format guessing
+          # (avoids issues with ./ prefix or wildcard matching in member names)
           mkdir -p /opt/immortalwrt-sdk
-          tar xf /tmp/sdk.tar.xz \
-            --wildcards \
-            --strip-components=2 \
-            "${SDK_DIRNAME}/staging_dir/toolchain-mipsel_24kc_gcc-12.3.0_musl*" \
-            -C /opt/immortalwrt-sdk
+          echo "Sample tar entries (for debug):"
+          tar tf /tmp/sdk.tar.xz | grep "toolchain-mipsel_24kc" | head -3
+          tar tf /tmp/sdk.tar.xz \
+            | grep "toolchain-mipsel_24kc_gcc-12.3.0_musl" \
+            | tar xf /tmp/sdk.tar.xz \
+                --strip-components=2 \
+                -C /opt/immortalwrt-sdk \
+                -T -
           rm /tmp/sdk.tar.xz
           echo "Verifying toolchain:"
           ls /opt/immortalwrt-sdk/toolchain-mipsel_24kc_gcc-12.3.0_musl/bin/ | head -5
