@@ -30,7 +30,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: /opt/immortalwrt-sdk
-          key: immortalwrt-sdk-23.05-ramips-mt7621-toolchain-v5
+          key: immortalwrt-sdk-23.05-ramips-mt7621-toolchain-v6
 
       - name: Download and extract ImmortalWrt SDK toolchain
         if: steps.cache-sdk.outputs.cache-hit != 'true'
@@ -39,19 +39,16 @@ jobs:
           SDK_DIRNAME="immortalwrt-sdk-23.05-SNAPSHOT-ramips-mt7621_gcc-12.3.0_musl.Linux-x86_64"
           echo "Downloading ImmortalWrt SDK..."
           wget --progress=dot:giga "$SDK_URL" -O /tmp/sdk.tar.xz
-          echo "Extracting toolchain..."
-          # Use tar tf | grep | tar -T - pipeline to avoid path format guessing
-          # (avoids issues with ./ prefix or wildcard matching in member names)
-          mkdir -p /opt/immortalwrt-sdk
-          echo "Sample tar entries (for debug):"
-          tar tf /tmp/sdk.tar.xz | grep "toolchain-mipsel_24kc" | head -3
-          tar tf /tmp/sdk.tar.xz \
-            | grep "toolchain-mipsel_24kc_gcc-12.3.0_musl" \
-            | tar xf /tmp/sdk.tar.xz \
-                --strip-components=2 \
-                -C /opt/immortalwrt-sdk \
-                -T -
+          echo "Extracting full SDK to /tmp (then move toolchain)..."
+          # Full extraction is the most reliable approach:
+          # toolchain/include/ contains hardlinks to target-mipsel/usr/include/,
+          # so selective extraction fails. Extract all, then move toolchain dir.
+          # --strip-components=1 removes the sdk-dirname prefix.
+          tar xf /tmp/sdk.tar.xz -C /tmp/ --strip-components=1
           rm /tmp/sdk.tar.xz
+          mkdir -p /opt/immortalwrt-sdk
+          mv /tmp/staging_dir/toolchain-mipsel_24kc_gcc-12.3.0_musl /opt/immortalwrt-sdk/
+          rm -rf /tmp/staging_dir /tmp/packages /tmp/Makefile /tmp/rules.mk /tmp/include /tmp/scripts /tmp/Config.in
           echo "Verifying toolchain:"
           ls /opt/immortalwrt-sdk/toolchain-mipsel_24kc_gcc-12.3.0_musl/bin/ | head -5
           /opt/immortalwrt-sdk/toolchain-mipsel_24kc_gcc-12.3.0_musl/bin/mipsel-openwrt-linux-musl-gcc --version
