@@ -13,56 +13,43 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     permissions:
       contents: write
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - name: Install dependencies
+      - name: Install dependencies and Python 2
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y bison flex libssl-dev xz-utils
+          sudo apt-get install -y bison flex libssl-dev swig
+          echo 'Building Python 2.7.18 from source (required by binman)...'
+          wget -q https://www.python.org/ftp/python/2.7.18/Python-2.7.18.tar.xz
+          tar -xJf Python-2.7.18.tar.xz
+          cd Python-2.7.18
+          ./configure --quiet && sudo make -j$(nproc) && sudo make install
+          sudo ln -sf /usr/local/bin/python2 /usr/bin/python
+          python --version
 
-      - name: Cache ImmortalWrt SDK toolchain
-        id: cache-sdk
-        uses: actions/cache@v4
-        with:
-          path: /opt/immortalwrt-sdk
-          key: immortalwrt-sdk-23.05-ramips-mt7621-toolchain-v7
-
-      - name: Download and extract ImmortalWrt SDK toolchain
-        if: steps.cache-sdk.outputs.cache-hit != 'true'
+      - name: Download OpenWrt toolchain
         run: |
-          SDK_URL="https://downloads.immortalwrt.org/releases/23.05-SNAPSHOT/targets/ramips/mt7621/immortalwrt-sdk-23.05-SNAPSHOT-ramips-mt7621_gcc-12.3.0_musl.Linux-x86_64.tar.xz"
-          SDK_DIRNAME="immortalwrt-sdk-23.05-SNAPSHOT-ramips-mt7621_gcc-12.3.0_musl.Linux-x86_64"
-          echo "Downloading ImmortalWrt SDK..."
-          wget --progress=dot:giga "$SDK_URL" -O /tmp/sdk.tar.xz
-          echo "Extracting full SDK to /tmp (then move toolchain + host)..."
-          # toolchain/bin/../../host/ = staging_dir/host/ is required by gcc wrapper
-          # (wrapper uses host/lib/ld-linux-x86-64.so.2 as dynamic linker)
-          tar xf /tmp/sdk.tar.xz -C /tmp/ --strip-components=1
-          rm /tmp/sdk.tar.xz
-          mkdir -p /opt/immortalwrt-sdk
-          mv /tmp/staging_dir/toolchain-mipsel_24kc_gcc-12.3.0_musl /opt/immortalwrt-sdk/
-          mv /tmp/staging_dir/host /opt/immortalwrt-sdk/
-          rm -rf /tmp/staging_dir /tmp/packages /tmp/Makefile /tmp/rules.mk /tmp/include /tmp/scripts /tmp/Config.in
-          echo "Verifying toolchain:"
-          ls /opt/immortalwrt-sdk/toolchain-mipsel_24kc_gcc-12.3.0_musl/bin/ | grep -E 'gcc$|gcc-[0-9]' | head -5
-          /opt/immortalwrt-sdk/toolchain-mipsel_24kc_gcc-12.3.0_musl/bin/mipsel-openwrt-linux-musl-gcc --version
+          wget -q -O - https://github.com/DragonBluep/uboot-mt7621/releases/download/20230517/openwrt-toolchain-ramips-mt7621_gcc-12.3.0_musl.Linux-x86_64.tar.xz \
+            | tar --xz -xf -
+          ls openwrt-toolchain-ramips-mt7621_gcc-12.3.0_musl.Linux-x86_64/bin/ | grep 'gcc$' | head -3
 
       - name: Build U-Boot for Oolite V8
         run: |
-          TOOLCHAIN=/opt/immortalwrt-sdk/toolchain-mipsel_24kc_gcc-12.3.0_musl
-          export CROSS_COMPILE=${TOOLCHAIN}/bin/mipsel-openwrt-linux-musl-
-          export STAGING_DIR=${TOOLCHAIN}
-          export PATH="${TOOLCHAIN}/bin:$PATH"
-          make mt7621_build_defconfig
-          make -j$(nproc) CROSS_COMPILE=${CROSS_COMPILE} STAGING_DIR=${STAGING_DIR}
-          mkdir -p archive
-          cp u-boot-mt7621.bin archive/
-          cp defconfig archive/mt7621_defconfig
+          ./customize.sh NOR \
+            '192k(u-boot),64k(u-boot-env),64k(factory),-(firmware)' \
+            0x50000 \
+            18 \
+            0 \
+            880 \
+            1066 \
+            DDR3-512MiB \
+            115200
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -89,7 +76,7 @@ jobs:
             - Baud rate: 115200
 
             ### Files
-            - `u-boot-mt7621.bin` — Flash this via TFTP or web recovery UI
+            - `u-boot-mt7621.bin` — Flash via TFTP or web recovery UI
             - `mt7621_defconfig` — Build configuration reference
 
             ### Flashing
